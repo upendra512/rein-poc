@@ -118,51 +118,51 @@ flowchart TD
 
 ```mermaid
 sequenceDiagram
-    participant Phone as 📱 Phone
-    participant Server as 🌐 HTTP Server
-    participant Desktop as 🖥️ Desktop
+    participant P as Phone (Client)
+    participant S as HTTP Server
+    participant D as Desktop (Peer)
 
-    Note over Phone, Desktop: Phase 1: Discovery & Authentication
+    Note over P, D: Phase 1 - Discovery and Authentication
 
-    Desktop->>Server: GET /api/ip
-    Server-->>Desktop: { ip: 192.168.x.x }
-    Desktop->>Server: POST /api/token (localhost only)
-    Server-->>Desktop: { token: "abc123" }
-    Desktop->>Desktop: Generate QR Code with token
+    D->>S: GET /api/ip
+    S-->>D: ip 192.168.x.x
+    D->>S: POST /api/token (localhost only)
+    S-->>D: token abc123
+    D->>D: Generate QR Code with token
 
-    Note over Phone, Desktop: Phase 2: WebRTC Signaling
+    Note over P, D: Phase 2 - WebRTC Signaling
 
-    Phone->>Phone: Scan QR → Open URL
-    Desktop->>Server: GET /api/signal/ice (SSE, role=desktop)
-    Note right of Server: SSE stream open
+    P->>P: Scan QR and Open URL
+    D->>S: GET /api/signal/ice (SSE role=desktop)
+    Note right of S: SSE stream open
 
-    Phone->>Phone: Create RTCPeerConnection
-    Phone->>Phone: Create DataChannels (ordered + unordered)
-    Phone->>Phone: Create SDP Offer
-    Phone->>Server: POST /api/signal { type: "offer", sdp }
-    Server-->>Desktop: SSE event: { type: "offer", sdp }
+    P->>P: Create RTCPeerConnection
+    P->>P: Create DataChannels
+    P->>P: Create SDP Offer
+    P->>S: POST /api/signal type offer
+    S-->>D: SSE event with SDP offer
 
-    Desktop->>Desktop: setRemoteDescription(offer)
-    Desktop->>Desktop: Create SDP Answer
-    Desktop->>Server: POST /api/signal { type: "answer", sdp }
-    Server-->>Phone: Return answer in HTTP response
+    D->>D: setRemoteDescription(offer)
+    D->>D: Create SDP Answer
+    D->>S: POST /api/signal type answer
+    S-->>P: Return answer in HTTP response
 
-    Phone->>Phone: setRemoteDescription(answer)
+    P->>P: setRemoteDescription(answer)
 
-    Note over Phone, Desktop: Phase 3: ICE Candidate Exchange
+    Note over P, D: Phase 3 - ICE Candidate Exchange
 
-    Phone->>Server: POST /api/signal { type: "candidate", from: "phone" }
-    Server-->>Desktop: SSE event: { type: "candidate" }
-    Desktop->>Server: POST /api/signal { type: "candidate", from: "desktop" }
-    Server-->>Phone: SSE event: { type: "candidate" }
+    P->>S: POST /api/signal candidate from phone
+    S-->>D: SSE event with ICE candidate
+    D->>S: POST /api/signal candidate from desktop
+    S-->>P: SSE event with ICE candidate
 
-    Note over Phone, Desktop: Phase 4: P2P Established ✅
+    Note over P, D: Phase 4 - P2P Established
 
-    Phone<-->Desktop: DataChannel (unordered): mouse, scroll, zoom
-    Phone<-->Desktop: DataChannel (ordered): key, text, click
-    Desktop->>Phone: MediaTrack: screen mirror (H.264/VP9)
+    P->>D: DataChannel unordered - mouse scroll zoom
+    P->>D: DataChannel ordered - key text click
+    D->>P: MediaTrack - screen mirror H264 VP9
 
-    Note over Server: Server is now IDLE<br/>All data flows P2P
+    Note over S: Server is now IDLE - All data flows P2P
 ```
 
 ---
