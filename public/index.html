@@ -15,28 +15,35 @@
       flex-direction: column;
       touch-action: none;
       user-select: none;
+      overflow-y: auto;
     }
 
     .header {
-      padding: 12px 16px;
+      padding: 10px 14px;
       background: #16213e;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      flex-shrink: 0;
     }
+    .header h1 { font-size: 16px; font-weight: 600; }
+    .header-right { display: flex; align-items: center; gap: 8px; }
 
-    .header h1 { font-size: 18px; font-weight: 600; }
+    .latency {
+      font-size: 11px;
+      color: #f39c12;
+      font-family: monospace;
+    }
 
     .status {
-      padding: 4px 12px;
-      border-radius: 12px;
-      font-size: 12px;
+      padding: 3px 10px;
+      border-radius: 10px;
+      font-size: 11px;
       font-weight: 500;
     }
-
-    .status.connected { background: #228B22; }
+    .status.connected    { background: #228B22; }
     .status.disconnected { background: #e74c3c; }
-    .status.connecting { background: #f39c12; }
+    .status.connecting   { background: #f39c12; color: #000; }
 
     .touchpad {
       flex: 1;
@@ -45,84 +52,179 @@
       align-items: center;
       justify-content: center;
       position: relative;
-      cursor: none;
+      min-height: 120px;
+      max-height: 45vh;
     }
-
-    .touchpad-label {
-      color: #ffffff33;
-      font-size: 24px;
+    .touchpad-hint {
+      color: #ffffff22;
+      font-size: 13px;
       pointer-events: none;
+      text-align: center;
+      line-height: 2;
     }
-
-    .controls {
-      display: flex;
-      gap: 8px;
-      padding: 12px 16px;
-      background: #16213e;
-    }
-
-    .controls button {
-      flex: 1;
-      padding: 14px;
-      border: none;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-
-    .btn-left { background: #228B22; color: white; }
-    .btn-right { background: #e94560; color: white; }
-    .btn-scroll { background: #533483; color: white; }
-    .btn-mirror { background: #0f3460; color: white; border: 1px solid #228B22; }
-
-    .controls button:active { opacity: 0.7; }
 
     .mirror-container {
       display: none;
       position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
+      inset: 0;
       background: black;
     }
-
     .mirror-container video {
       width: 100%;
       height: 100%;
       object-fit: contain;
     }
 
-    .info {
-      padding: 8px 16px;
-      background: #0a0a1a;
-      font-size: 11px;
-      color: #666;
-      text-align: center;
+    .controls {
+      display: flex;
+      gap: 6px;
+      padding: 8px 12px;
+      background: #16213e;
+      flex-shrink: 0;
     }
+    .controls button {
+      flex: 1;
+      padding: 12px 4px;
+      border: none;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .btn-left   { background: #228B22; color: white; }
+    .btn-right  { background: #e94560; color: white; }
+    .btn-scroll { background: #533483; color: white; }
+    .btn-mirror { background: #0f3460; color: white; border: 1px solid #228B22 !important; }
+    .controls button:active { opacity: 0.7; }
+
+    /* Keyboard section */
+    .keyboard-section {
+      background: #12122a;
+      flex-shrink: 0;
+      border-top: 1px solid #2a2a4a;
+    }
+
+    .keyboard-tabs {
+      display: flex;
+      border-bottom: 1px solid #2a2a4a;
+    }
+    .keyboard-tabs button {
+      flex: 1;
+      padding: 7px;
+      background: none;
+      border: none;
+      color: #666;
+      font-size: 11px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+    }
+    .keyboard-tabs button.active {
+      color: #3498db;
+      border-bottom-color: #3498db;
+    }
+
+    .kb-panel { display: none; padding: 8px; }
+    .kb-panel.active { display: block; }
+
+    /* Text input panel */
+    .text-row {
+      display: flex;
+      gap: 6px;
+    }
+    .text-row input {
+      flex: 1;
+      padding: 8px 10px;
+      background: #0a0a1a;
+      border: 1px solid #2a2a4a;
+      border-radius: 8px;
+      color: #eee;
+      font-size: 14px;
+      outline: none;
+      touch-action: auto;
+    }
+    .text-row input:focus { border-color: #3498db; }
+    .text-row button {
+      padding: 8px 14px;
+      background: #3498db;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    /* Special keys panel */
+    .special-keys {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 5px;
+    }
+    .special-keys button {
+      padding: 9px 4px;
+      background: #16213e;
+      border: 1px solid #2a2a4a;
+      border-radius: 6px;
+      color: #eee;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .special-keys button:active { background: #0f3460; }
+    .special-keys button.wide { grid-column: span 2; }
   </style>
 </head>
 <body>
   <div class="header">
     <h1>Rein PoC</h1>
-    <span id="status" class="status disconnected">Disconnected</span>
+    <div class="header-right">
+      <span class="latency" id="latency">-- ms</span>
+      <span id="status" class="status connecting">Connecting...</span>
+    </div>
   </div>
 
   <div class="touchpad" id="touchpad">
-    <span class="touchpad-label">Touch Area</span>
+    <span class="touchpad-hint">Touch to move cursor<br>Tap to click · 2-finger scroll<br>Pinch to zoom</span>
     <div class="mirror-container" id="mirror">
-      <video id="mirrorVideo" autoplay playsinline muted></video>
+      <video id="mirrorVideo" autoplay playsinline></video>
     </div>
   </div>
 
   <div class="controls">
-    <button class="btn-left" id="btnLeft">Left Click</button>
-    <button class="btn-right" id="btnRight">Right Click</button>
-    <button class="btn-scroll" id="btnScroll">Scroll Mode</button>
+    <button class="btn-left"   id="btnLeft">Left</button>
+    <button class="btn-right"  id="btnRight">Right</button>
+    <button class="btn-scroll" id="btnScroll">Scroll</button>
     <button class="btn-mirror" id="btnMirror">Mirror</button>
   </div>
 
-  <div class="info">
-    WebRTC DataChannel (unordered: mouse/scroll | ordered: keys/text) + Koffi FFI Input
+  <!-- Keyboard Section -->
+  <div class="keyboard-section">
+    <div class="keyboard-tabs">
+      <button class="active" data-tab="text">Text Input</button>
+      <button data-tab="keys">Special Keys</button>
+    </div>
+
+    <div class="kb-panel active" id="tab-text">
+      <div class="text-row">
+        <input type="text" id="textInput" placeholder="Type and press Send..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <button id="btnSend">Send</button>
+      </div>
+    </div>
+
+    <div class="kb-panel" id="tab-keys">
+      <div class="special-keys">
+        <button data-key="Return">↵ Enter</button>
+        <button data-key="BackSpace">⌫ Back</button>
+        <button data-key="Tab">Tab</button>
+        <button data-key="Escape">Esc</button>
+        <button data-key="Up">↑ Up</button>
+        <button data-key="Down">↓ Down</button>
+        <button data-key="Left">← Left</button>
+        <button data-key="Right">→ Right</button>
+        <button data-key="ctrl+c" class="wide">Copy (Ctrl+C)</button>
+        <button data-key="ctrl+v" class="wide">Paste (Ctrl+V)</button>
+        <button data-key="ctrl+z" class="wide">Undo (Ctrl+Z)</button>
+        <button data-key="ctrl+a" class="wide">Select All</button>
+      </div>
+    </div>
   </div>
 
   <script src="webrtc-client.js"></script>

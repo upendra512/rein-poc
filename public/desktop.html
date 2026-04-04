@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rein PoC - Desktop Peer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      gap: 16px;
+    }
+    h1 { font-size: 26px; font-weight: 700; }
+    .subtitle { color: #888; font-size: 13px; margin-top: 4px; }
+    .status {
+      display: inline-block;
+      padding: 6px 18px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .status.waiting  { background: #f39c12; color: #000; }
+    .status.connected { background: #228B22; color: #fff; }
+    .status.disconnected { background: #e74c3c; color: #fff; }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 16px;
+      width: 100%;
+      max-width: 800px;
+    }
+
+    .qr-card {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    .qr-card h3 { font-size: 13px; color: #aaa; }
+    .qr-card img { border-radius: 8px; }
+    .qr-url {
+      font-family: monospace;
+      font-size: 11px;
+      color: #3498db;
+      text-align: center;
+      word-break: break-all;
+    }
+
+    .stats-card {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .stats-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .stat {
+      flex: 1;
+      background: #0f3460;
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+    }
+    .stat .num { font-size: 22px; font-weight: 700; color: #3498db; }
+    .stat .label { font-size: 10px; color: #666; margin-top: 2px; }
+    .stat.green .num { color: #228B22; }
+    .stat.red .num { color: #e94560; }
+    .stat.purple .num { color: #9b59b6; }
+    .stat.ping .num { color: #f39c12; }
+
+    .log {
+      background: #0a0a1a;
+      border-radius: 8px;
+      padding: 10px;
+      font-family: monospace;
+      font-size: 11px;
+      height: 150px;
+      overflow-y: auto;
+    }
+    .log div { padding: 1px 0; }
+    .log .info    { color: #3498db; }
+    .log .success { color: #2ecc71; }
+    .log .warn    { color: #f39c12; }
+    .log .move    { color: #555; }
+    .log .click   { color: #e94560; }
+    .log .scroll  { color: #9b59b6; }
+    .log .key     { color: #2ecc71; }
+    .log .zoom    { color: #f39c12; }
+
+    .mirror-btn {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #228B22;
+      background: #0f3460;
+      color: white;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      margin-top: 8px;
+      transition: background 0.2s;
+    }
+    .mirror-btn:hover { background: #228B22; }
+    .mirror-btn.active { background: #228B22; }
+  </style>
+</head>
+<body>
+  <div>
+    <h1>Rein Desktop Peer</h1>
+    <p class="subtitle">WebRTC + Koffi PoC — open this on your laptop first, then scan QR on phone</p>
+  </div>
+
+  <span id="status" class="status waiting">Waiting for phone...</span>
+
+  <div class="main-grid">
+    <!-- QR Code -->
+    <div class="qr-card">
+      <h3>Scan with Phone</h3>
+      <img id="qrImg" width="180" height="180" src="" alt="Loading QR...">
+      <div class="qr-url" id="phoneUrl">detecting IP...</div>
+    </div>
+
+    <!-- Stats + Log -->
+    <div class="stats-card">
+      <div class="stats-row">
+        <div class="stat green">
+          <div class="num" id="moveCount">0</div>
+          <div class="label">Mouse Events</div>
+        </div>
+        <div class="stat red">
+          <div class="num" id="clickCount">0</div>
+          <div class="label">Clicks</div>
+        </div>
+        <div class="stat purple">
+          <div class="num" id="scrollCount">0</div>
+          <div class="label">Scrolls</div>
+        </div>
+        <div class="stat ping">
+          <div class="num" id="latency">--</div>
+          <div class="label">Latency (ms)</div>
+        </div>
+      </div>
+
+      <div class="log" id="log"></div>
+
+      <button class="mirror-btn" id="btnMirror">Share Screen via WebRTC</button>
+    </div>
+  </div>
+
+  <script>
+    let pc = null
+    let dcOrdered = null  // store for sending pong back
+    let moveCount = 0, clickCount = 0, scrollCount = 0
+
+    function log(msg, cls = 'info') {
+      const el = document.getElementById('log')
+      const div = document.createElement('div')
+      div.className = cls
+      div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`
+      el.appendChild(div)
+      el.scrollTop = el.scrollHeight
+    }
+
+    function setStatus(state, text) {
+      const el = document.getElementById('status')
+      el.className = `status ${state}`
+      el.textContent = text
+    }
+
+    // Load QR code from server
+    async function loadQR() {
+      try {
+        const res = await fetch('/api/qr')
+        const data = await res.json()
+        document.getElementById('qrImg').src = data.dataUrl
+        document.getElementById('phoneUrl').textContent = data.url
+        log(`Phone URL: ${data.url}`)
+      } catch {
+        document.getElementById('phoneUrl').textContent = 'Could not detect IP'
+      }
+    }
+
+    async function forwardInput(msg) {
+      try {
+        await fetch('/api/input', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(msg)
+        })
+      } catch {}
+    }
+
+    function handleInput(msg) {
+      switch (msg.type) {
+        case 'move':
+          moveCount++
+          document.getElementById('moveCount').textContent = moveCount
+          if (moveCount % 30 === 0) log(`Mouse move #${moveCount}`, 'move')
+          forwardInput(msg)
+          break
+
+        case 'click':
+          clickCount++
+          document.getElementById('clickCount').textContent = clickCount
+          log(`Click: ${msg.button} ${msg.press ? '▼' : '▲'}`, 'click')
+          forwardInput(msg)
+          break
+
+        case 'scroll':
+          scrollCount++
+          document.getElementById('scrollCount').textContent = scrollCount
+          log(`Scroll: dy=${msg.dy?.toFixed(1)}`, 'scroll')
+          forwardInput(msg)
+          break
+
+        case 'key':
+          log(`Key: ${msg.key}`, 'key')
+          forwardInput(msg)
+          break
+
+        case 'text':
+          log(`Text: "${msg.text}"`, 'key')
+          forwardInput(msg)
+          break
+
+        case 'zoom':
+          log(`Zoom: ${msg.delta > 0 ? '+' : ''}${msg.delta?.toFixed(2)}`, 'zoom')
+          forwardInput(msg)
+          break
+
+        case 'ping':
+          // Send pong back immediately via ordered DataChannel
+          if (dcOrdered && dcOrdered.readyState === 'open') {
+            dcOrdered.send(JSON.stringify({ type: 'pong', ts: msg.ts }))
+          }
+          break
+      }
+    }
+
+    async function connectAsDesktop() {
+      log('Desktop peer ready, waiting for phone...')
+      const evtSource = new EventSource('/api/signal/ice?role=desktop')
+
+      evtSource.onmessage = async (event) => {
+        const data = JSON.parse(event.data)
+
+        if (data.type === 'offer') {
+          log('Received SDP offer from phone', 'success')
+          await handleOffer(data)
+        }
+
+        if (data.type === 'answer' && data.from === 'phone') {
+          // Phone answered our renegotiation offer (e.g. screen share)
+          log('Received renegotiation answer from phone', 'success')
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: data.sdp }))
+            log('Screen share renegotiation complete!', 'success')
+          } catch (err) {
+            log(`Renegotiation error: ${err.message}`, 'warn')
+          }
+        }
+
+        if (data.type === 'candidate' && data.candidate) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(data.candidate))
+          } catch {}
+        }
+      }
+    }
+
+    async function handleOffer(offer) {
+      pc = new RTCPeerConnection({ iceServers: [] })
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          fetch('/api/signal', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'candidate', candidate: event.candidate, from: 'desktop' })
+          })
+        }
+      }
+
+      pc.oniceconnectionstatechange = () => {
+        log(`ICE: ${pc.iceConnectionState}`)
+        if (pc.iceConnectionState === 'connected') {
+          setStatus('connected', '🟢 Connected (P2P)')
+          log('WebRTC P2P established!', 'success')
+        }
+        if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+          setStatus('disconnected', 'Disconnected')
+          dcOrdered = null
+        }
+      }
+
+      pc.ondatachannel = (event) => {
+        const dc = event.channel
+        log(`DataChannel: ${dc.label} (ordered=${dc.ordered})`, 'success')
+
+        // Store ordered channel reference for sending pong
+        if (dc.ordered) dcOrdered = dc
+
+        dc.onmessage = (e) => {
+          try {
+            handleInput(JSON.parse(e.data))
+          } catch {}
+        }
+      }
+
+      await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offer.sdp }))
+      const answer = await pc.createAnswer()
+      await pc.setLocalDescription(answer)
+
+      await fetch('/api/signal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'answer', sdp: answer.sdp })
+      })
+
+      log('Sent SDP answer', 'success')
+    }
+
+    // Screen share button
+    document.getElementById('btnMirror').addEventListener('click', async () => {
+      if (!pc) { alert('Wait for phone to connect first!'); return }
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: 'always' }, audio: false })
+        for (const track of stream.getTracks()) pc.addTrack(track, stream)
+
+        // Renegotiate with phone so it receives the new MediaTrack
+        const offer = await pc.createOffer()
+        await pc.setLocalDescription(offer)
+        await fetch('/api/signal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'offer', sdp: offer.sdp, from: 'desktop' })
+        })
+
+        document.getElementById('btnMirror').textContent = 'Sharing Screen...'
+        document.getElementById('btnMirror').classList.add('active')
+        log('Screen share offer sent — waiting for phone to accept', 'success')
+      } catch (err) {
+        log(`Screen share: ${err.message}`, 'warn')
+      }
+    })
+
+    loadQR()
+    connectAsDesktop()
+  </script>
+</body>
+</html>

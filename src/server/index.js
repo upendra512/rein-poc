@@ -1,6 +1,7 @@
 import express from "express"
 import { fileURLToPath } from "node:url"
 import { dirname, join } from "node:path"
+import QRCode from "qrcode"
 import { createSignalingServer } from "./signaling.js"
 import { InputHandler } from "../input/handler.js"
 
@@ -12,6 +13,11 @@ const PORT = 3000
 
 app.use(express.json())
 app.use(express.static(join(__dirname, "../../public")))
+
+// Desktop opens /desktop, phone opens / (root)
+app.get("/desktop", (req, res) => {
+  res.sendFile(join(__dirname, "../../public/desktop.html"))
+})
 
 // Input handler using Koffi (replaces nut.js)
 const inputHandler = new InputHandler()
@@ -34,12 +40,20 @@ app.post("/api/input", async (req, res) => {
 })
 
 // IP detection (same as current Rein)
-app.get("/api/ip", (req, res) => {
-  const ip = getLocalIp()
+app.get("/api/ip", async (req, res) => {
+  const ip = await getLocalIp()
   res.json({ ip })
 })
 
-function getLocalIp() {
+// QR code endpoint - generates QR for phone URL
+app.get("/api/qr", async (req, res) => {
+  const ip = await getLocalIp()
+  const url = `http://${ip}:${PORT}`
+  const dataUrl = await QRCode.toDataURL(url, { width: 200, margin: 2 })
+  res.json({ dataUrl, url })
+})
+
+async function getLocalIp() {
   const { createSocket } = await import("node:dgram")
   // Same trick as Rein: connect UDP socket to get LAN IP
   return new Promise((resolve) => {

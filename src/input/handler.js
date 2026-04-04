@@ -17,6 +17,7 @@
 
 import koffi from "koffi"
 import os from "node:os"
+import { execFileSync } from "node:child_process"
 
 // Platform-specific input implementations
 let platformInput = null
@@ -160,13 +161,36 @@ function initWindows() {
       console.log(`[Koffi] Type text: "${text}"`)
       // In full implementation: use SendInput with KEYEVENTF_UNICODE
     },
+
+    zoom(delta) {
+      // Ctrl + scroll wheel for zoom
+      const VK_CONTROL = 0x11
+      // Press Ctrl
+      const ctrlDown = {
+        type: INPUT_KEYBOARD,
+        mi: { dx: VK_CONTROL, dy: 0, mouseData: 0, dwFlags: 0, time: 0, dwExtraInfo: 0 },
+      }
+      // Scroll
+      const scroll = {
+        type: INPUT_MOUSE,
+        mi: { dx: 0, dy: 0, mouseData: Math.round(delta * 120 * 5), dwFlags: MOUSEEVENTF_WHEEL, time: 0, dwExtraInfo: 0 },
+      }
+      // Release Ctrl
+      const ctrlUp = {
+        type: INPUT_KEYBOARD,
+        mi: { dx: VK_CONTROL, dy: 0, mouseData: 0, dwFlags: KEYEVENTF_KEYUP, time: 0, dwExtraInfo: 0 },
+      }
+      SendInput(1, [ctrlDown], koffi.sizeof(INPUT))
+      SendInput(1, [scroll], koffi.sizeof(INPUT))
+      SendInput(1, [ctrlUp], koffi.sizeof(INPUT))
+    },
   }
 }
 
 function initLinux() {
   // For Linux: use ydotool (Wayland) or X11/XTest
   // This is a simplified version for the PoC
-  const { execFileSync } = await import("node:child_process")
+  // execFileSync imported at top level
 
   return {
     move(dx, dy) {
@@ -212,6 +236,10 @@ function initLinux() {
         console.warn("[Koffi/Linux] ydotool not available, skipping type")
       }
     },
+
+    zoom(delta) {
+      console.log(`[Koffi/Linux] Zoom: ${delta}`)
+    },
   }
 }
 
@@ -234,6 +262,10 @@ function initMacOS() {
     type(text) {
       console.log(`[Koffi/macOS] Type: "${text}"`)
     },
+
+    zoom(delta) {
+      console.log(`[Koffi/macOS] Zoom: ${delta}`)
+    },
   }
 }
 
@@ -245,17 +277,7 @@ export class InputHandler {
     if (platform === "win32") {
       platformInput = initWindows()
     } else if (platform === "linux") {
-      // Linux init is async, handle accordingly
-      platformInput = {
-        move: () => {},
-        click: () => {},
-        scroll: () => {},
-        keyPress: () => {},
-        type: () => {},
-      }
-      initLinux().then((impl) => {
-        platformInput = impl
-      })
+      platformInput = initLinux()
     } else if (platform === "darwin") {
       platformInput = initMacOS()
     } else {
@@ -295,8 +317,7 @@ export class InputHandler {
         break
 
       case "zoom":
-        // Ctrl + scroll for zoom
-        platformInput.scroll(0, msg.delta || 0)
+        platformInput.zoom(msg.delta || 0)
         break
     }
   }
