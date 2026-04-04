@@ -89,14 +89,20 @@
 
 ## Demo Video
 
-> TODO: Add demo video showing trackpad + screen mirror working
+[![Rein PoC Demo - WebRTC + Koffi](https://img.youtube.com/vi/Y7DnOQ0exhQ/maxresdefault.jpg)](https://youtu.be/Y7DnOQ0exhQ)
+
+> Watch the PoC in action: P2P trackpad control, keyboard input, real-time latency display, pinch-to-zoom, and screen mirroring — all via WebRTC + Koffi FFI.
 
 ## Setup
 
 ```bash
 npm install
-npm run dev
-# Open http://localhost:3000 on your phone (same network)
+node src/server/index.js
+
+# 1. Open http://localhost:3000/desktop on your laptop (desktop peer)
+# 2. Scan the QR code with your phone — or open http://<your-ip>:3000
+# 3. Wait for "Connected (P2P)" status
+# 4. Click "Share Screen" on desktop, tap "Mirror" on phone
 ```
 
 ## File Structure
@@ -104,14 +110,15 @@ npm run dev
 ```
 rein-poc/
 ├── public/
-│   ├── index.html           # Client UI (touchpad + controls)
-│   └── webrtc-client.js     # WebRTC client (DataChannels + MediaTrack)
+│   ├── index.html           # Phone UI (touchpad, keyboard, latency display)
+│   ├── desktop.html         # Desktop peer (QR code, stats, screen share)
+│   └── webrtc-client.js     # WebRTC client (DataChannels, ping/pong, pinch zoom)
 ├── src/
 │   ├── server/
-│   │   ├── index.js         # Express server + signaling
-│   │   └── signaling.js     # SDP exchange + ICE via HTTP/SSE
+│   │   ├── index.js         # Express server + QR code endpoint
+│   │   └── signaling.js     # Bidirectional SDP/ICE via HTTP + SSE
 │   └── input/
-│       └── handler.js       # Koffi-based input handler (replaces nut.js)
+│       └── handler.js       # Koffi FFI input (Win32, Linux, macOS)
 ├── package.json
 └── README.md
 ```
